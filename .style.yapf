@@ -1,0 +1,4 @@
+[style]
+based_on_style = facebook
+allow_multiline_lambdas = True
+column_limit = 80
