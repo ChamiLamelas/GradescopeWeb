@@ -85,8 +85,6 @@ class GradescopeSession(requests.Session):
         # while not self.login(email, password):
         #     print("Error: Login failed, try again")
 
-        self.get_classes()
-
     def request(self, method, url, *args, **kwargs):
         # Avoid needing to specify https://gradescope.com every time
         url = urllib.parse.urljoin(self.BASE_URL, url)
@@ -103,42 +101,46 @@ class GradescopeSession(requests.Session):
             "session[password]": password,
         }
 
-    # TODO: Make this a property
+    @property
     @fromPage("/account")
-    def get_classes(self, soup):
-        self.classes = []
-        for c in soup.select(".courseBox:not(.courseBox-new)"):
-            self.classes.append(
-                Class(
-                    role="instructor" if next(
-                        c.find_parent(True,
-                                      class_="courseList").previous_siblings
-                    ).contents[0] == "Instructor Courses" else "student",
-                    href=c["href"],
-                    session=self
-                )
-            )
+    def classes(self, soup):
+        return [
+            Class(
+                self._session,
+                role=role.text[:-len(" Courses")].lower(),
+                href=c["href"],
+                name=c.select_one(".courseBox--shortname").text,
+                semester=semester.text
+            ) for role in soup.select(".pageHeading")
+            for semester in role.find_next_sibling("div"
+                                                  ).select(".pageSubheading")
+            for c in semester.find_next_sibling("div").
+            select(".courseBox:not(.courseBox-new)")
+        ]
 
 
 class Class():
-    def __init__(self, role, session, href=None, name=None, semester=None):
+    def __init__(self, session, role, href, name, semester):
         self.role = role
         self._path = href
         self.name = name
         self.semester = semester
         self._session = session
-        self.id = int(re.search(r"(?<=courses\/)\d+(?=\/?)", self._path))
-
-    # TODO: Make this a property
-    @fromPage("/assignments")
-    def get_assignment(self, soup):
-        self.assignments = (
-            [
-                ProgrammingAssignment(
-                    name=a.contents[0], href=a["href"], session=self._session
-                ) for a in soup.select("td > a:not(:has( >  *))")
-            ]
+        self.id = int(
+            re.search(r"(?<=courses\/)\d+(?=\/?)", self._path).group()
         )
+
+    @property
+    @fromPage("/assignments")
+    def assignments(self, soup):
+        return [
+            ProgrammingAssignment(
+                name=a.contents[0], href=a["href"], session=self._session
+            ) for a in soup.select("td > a:not(:has( >  *))")
+        ]
+
+    def __repr__(self):
+        return "Class(" + self.name + ", " + self.semester + ", " + self.role + ")"
 
     def create_assignment(
         self, title, totalPoints, releaseDate, dueDate, **kwargs
@@ -184,17 +186,20 @@ class ProgrammingAssignment():
         self._path = href
         self.name = name
         self._session = session
-        self.id = int(re.search(r"(?<=assignments\/)\d+(?=\/?)", self._path))
-
-    # TODO: Make this a property
-    @fromPage("/submissions")
-    def get_submissions(self, soup):
-        self.submissions = (
-            [
-                self.Submission(href=a["href"], session=self._session)
-                for a in soup.select("td > a:not(:has( >  *))")
-            ]
+        self.id = int(
+            re.search(r"(?<=assignments\/)\d+(?=\/?)", self._path).group()
         )
+
+    @property
+    @fromPage("/submissions")
+    def submissions(self, soup):
+        return [
+            self.Submission(href=a["href"], session=self._session)
+            for a in soup.select("td > a:not(:has( >  *))")
+        ]
+
+    def __repr__(self):
+        return "ProgrammingAssignment(" + self.name + ")"
 
     @submitForm()
     def delete(self):
@@ -216,7 +221,7 @@ class ProgrammingAssignment():
         allowBitbucket: bool = NotImplemented,
         leaderboardEntries=NotImplemented,
         memoryLimit: str = NotImplemented,
-        autograderTimeout: str = NotImplemented,
+        autograderTimeout: str = NotImplemented
     ):
 
         toEdit = dict(
@@ -283,8 +288,7 @@ class ProgrammingAssignment():
 
 if __name__ == "__main__":
     g = GradescopeSession()
-    comp15 = Class("instructor", g, href="courses/159653")
-    comp15.get_assignment()
+    comp15 = Class(g, "instructor", "courses/159653", None, None)
 
     assignmentName = "test1"
     [a.delete() for a in comp15.assignments]
@@ -296,12 +300,12 @@ if __name__ == "__main__":
         releaseDate=dt,
         dueDate=dt,
         lateDueDate=dt,
-        groupSize=3,
-        manualGrading=True,
-        allowGithub=True,
+        groupSize=None,
+        manualGrading=None,
+        allowGithub=False,
         allowUpload=False,
-        allowBitbucket=True,
-        leaderboardEntries=-1,
+        allowBitbucket=False,
+        leaderboardEntries=None,
         memoryLimit=6144,
         autograderTimeout=600
     )
