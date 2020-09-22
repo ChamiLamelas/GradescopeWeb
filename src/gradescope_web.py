@@ -223,7 +223,8 @@ class ProgrammingAssignment():
         memoryLimit: str = NotImplemented,
         autograderTimeout: str = NotImplemented
     ):
-
+        # Atleast one of allowGithub, allowUplod, allowBitbucket needs to be
+        # set. Otherwise nothing is done for submission methods
         toEdit = dict(
             kv for kv in locals().items()
             if kv[1] != NotImplemented and kv[0] != "self"
@@ -291,7 +292,7 @@ if __name__ == "__main__":
     comp15 = Class(g, "instructor", "courses/159653", None, None)
 
     assignmentName = "test1"
-    [a.delete() for a in comp15.assignments]
+    [a.delete() for a in comp15.assignments if a.name == assignmentName]
     dt = datetime.now().replace(year=datetime.now().year + 2)
 
     assignment = comp15.create_assignment(
