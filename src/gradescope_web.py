@@ -8,6 +8,7 @@ from pprint import pprint
 
 import requests
 from bs4 import BeautifulSoup
+from requests_toolbelt import MultipartEncoder
 
 
 def getSoup(content):
@@ -33,13 +34,18 @@ def authenticityToken(soup):
     return soup.select_one("input[name=authenticity_token]")["value"]
 
 
-def submitForm(href=""):
+def submitForm(href="", multipart=False):
     def decorator(func):
         @fromPage(href)
         def toReturn(self, soup, *args, **kwargs):
             data = func(self, *args, **kwargs)
             data["authenticity_token"] = authenticityToken(soup)
             headers = {}
+
+            if multipart:
+                data = MultipartEncoder(fields=data)
+                headers["content-type"] = data.content_type
+
             response = self._session.post(
                 self._path + href,
                 headers=headers,
@@ -275,6 +281,24 @@ class ProgrammingAssignment():
         )
         return form
 
+    @submitForm(multipart=True)
+    def updateAutograder(self, autograderzip):
+        return {
+            "_method":
+                "patch",
+            "configuration":
+                "zip",
+            # if not first time, this is initialized to docker image name
+            # seems to work fine if not set
+            "assignment[image_name]":
+                "",
+            "autograder_zip":
+                (
+                    "autograder.zip", open(autograderzip,
+                                           'rb'), "application/x-zip-compressed"
+                ),
+        }
+
     class Submission():
         def __init__(self, href, session):
             self._path = href
@@ -285,30 +309,3 @@ class ProgrammingAssignment():
             self.testcases = '\n'.join(
                 x["name"] for x in soup.select("div.testCase--header > a")
             )
-
-
-if __name__ == "__main__":
-    g = GradescopeSession()
-    comp15 = Class(g, "instructor", "courses/159653", None, None)
-
-    assignmentName = "test1"
-    [a.delete() for a in comp15.assignments if a.name == assignmentName]
-    dt = datetime.now().replace(year=datetime.now().year + 2)
-
-    assignment = comp15.create_assignment(
-        title=assignmentName,
-        totalPoints=0,
-        releaseDate=dt,
-        dueDate=dt,
-        lateDueDate=dt,
-        groupSize=None,
-        manualGrading=None,
-        allowGithub=False,
-        allowUpload=False,
-        allowBitbucket=False,
-        leaderboardEntries=None,
-        memoryLimit=6144,
-        autograderTimeout=600
-    )
-
-    assert (assignment is not None)
