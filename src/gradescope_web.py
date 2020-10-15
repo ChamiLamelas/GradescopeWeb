@@ -118,10 +118,11 @@ class GradescopeSession(requests.Session):
                 name=c.select_one(".courseBox--shortname").text,
                 semester=semester.text
             ) for role in soup.select(".pageHeading")
-            for semester in role.find_next_sibling("div"
+            for semester in role.find_next_sibling("div", class_="courseList"
                                                   ).select(".pageSubheading")
-            for c in semester.find_next_sibling("div").
-            select(".courseBox:not(.courseBox-new)")
+            for c in semester.find_next_sibling(
+                "div", class_="courseList--coursesForTerm"
+            ).select(".courseBox:not(.courseBox-new)")
         ]
 
 
