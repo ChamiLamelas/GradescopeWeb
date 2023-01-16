@@ -110,20 +110,48 @@ class GradescopeSession(requests.Session):
     @property
     @fromPage("/account")
     def classes(self, soup):
-        return [
-            Class(
-                self._session,
-                role=role.text[:-len(" Courses")].lower(),
-                href=c["href"],
-                name=c.select_one(".courseBox--shortname").text,
-                semester=semester.text
-            ) for role in soup.select(".pageHeading")
-            for semester in role.find_next_sibling("div", class_="courseList"
-                                                  ).select(".pageSubheading")
-            for c in semester.find_next_sibling(
-                "div", class_="courseList--coursesForTerm"
-            ).select(".courseBox:not(.courseBox-new)")
-        ]
+        """
+        Edited by Chami Lamelas (slamel01)
+        1/16/2023 
+
+        Changes made to scrape Gradescope's new HTML format.
+        Previous code did not properly identify courses.
+        """
+
+        # Builds list of Class - returned
+        classes = list()
+
+        # Current semester (see below)
+        curr_sem = None
+
+        # .pageHeading h1 elements are Instructor Courses, Student Courses, etc.
+        # hence these are used to identify the roles the current user has in
+        # said courses
+        for role in soup.select(".pageHeading"):
+
+            # move from .pageHeading to next div at same hierarchical level (i.e. sibling)
+            # that is courseList - courses seem to sit in here - e stands for course list 
+            # element
+            for e in role.find_next_sibling("div", class_="courseList"):
+
+                # Some of the divs under courseList are the term of the course, we extract
+                # the text of the div which will be like "Fall 2022" and set that as the 
+                # current semester
+                if e['class'][0] == 'courseList--term':
+                     curr_sem = e.contents[0]
+
+                # After courseList--term in the HTML, the actual courses are listed in a
+                # courseList-coursesForTerm in a <a> element
+                elif e['class'][0] == 'courseList--coursesForTerm':
+
+                     # Courses are the elements inside and for each we construct a Class
+                     # as done previously role is set to the thing before Courses in 
+                     # role, href is a relative link in the <a> elements, shortname text gives
+                     # something like CS 15
+                     for course in e.select("a"):
+                         classes.append(Class(self._session, role=role.text[:-len(" Courses")].lower(), href=course["href"], name=course.select_one(".courseBox--shortname").text, semester=curr_sem))
+        
+        return classes
 
 
 class Class():
